@@ -150,15 +150,22 @@ class STL(QThread):
                     face_z_values = [
                            (getattr(face, "z")-SHELL_THICKNESS
                            if
-                           getattr(face, "x")> x_min_model+SHELL_THICKNESS and 
-                           getattr(face, "x")< x_max_model-SHELL_THICKNESS and 
-                           getattr(face, "y")>y_min_model+SHELL_THICKNESS and 
+                           getattr(face, "x") > x_min_model+SHELL_THICKNESS and 
+                           getattr(face, "x") < x_max_model-SHELL_THICKNESS and 
+                           getattr(face, "y") > y_min_model+SHELL_THICKNESS and 
                            getattr(face, "y") < y_max_model-SHELL_THICKNESS
                            else 0)
                            for face in [face[0],face[1],face[2]]
                         ]
+                    p1 = self.pto(getattr(face[0], "x"), getattr(face[0], "y"), face_z_values[0])
+                    p2 = self.pto(getattr(face[1], "x"), getattr(face[1], "y"), face_z_values[1])
+                    p3 = self.pto(getattr(face[2], "x"), getattr(face[2], "y"), face_z_values[2])
+                    if sum(face_z_values) != 0:
+                        normal = self.get_normal(p1, p2, p3)
+                    else:
+                        normal = face[3]
                     data = [
-                        getattr(face[3], "normal_x"), getattr(face[3], "normal_y"), getattr(face[3], "normal_z"),
+                        getattr(normal, "normal_x"), getattr(normal, "normal_y"), getattr(normal, "normal_z"),
                         getattr(face[1], "x"), getattr(face[1], "y"), face_z_values[1],
                         getattr(face[0], "x"), getattr(face[0], "y"), face_z_values[0],
                         getattr(face[2], "x"), getattr(face[2], "y"), face_z_values[2],
