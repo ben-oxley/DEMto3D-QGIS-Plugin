@@ -24,6 +24,7 @@ from builtins import range
 import collections
 import struct
 import math
+import traceback
 
 from qgis.PyQt.QtCore import QThread, pyqtSignal
 
@@ -61,7 +62,7 @@ class STL(QThread):
                 x_max_model = width_model * j + width_model
                 y_max_model = self.parameters["height"] - i * high_model
                 dem_model = self.cut_dem(self.matrix_dem, self.parameters["spacing_mm"], x_min_model, y_min_model, x_max_model, y_max_model)
-                self.write_binary(path, dem_model)
+                self.write_binary(path, dem_model, x_min_model, y_min_model, x_max_model, y_max_model)
 
         # self.write_binary(self.stl_file, self.matrix_dem)
 
@@ -123,24 +124,55 @@ class STL(QThread):
         f.write("endsolid model\n")
         f.close()
 
-    def write_binary(self, fileName, demData):
+    def write_binary(self, fileName, demData, x_min_model, y_min_model, x_max_model, y_max_model):
+        logfile = open(fileName+'.log', 'w') 
+        logfile.write('logstarted\n')
         try:
             counter = 0
+            
             stream = open(fileName, "wb")
             stream.seek(0)
             stream.write(struct.pack(BINARY_HEADER, b'Python Binary STL Writer', counter))
 
             dem = self.face_dem_vector(demData)
+            logfile.write(str(len(dem))+'\n')
             for face in dem:
                 self.updateProgress.emit()
                 counter += 1
-                data = [
-                    0, 0, -1,
-                    getattr(face[1], "x"), getattr(face[1], "y"), 0,
-                    getattr(face[0], "x"), getattr(face[0], "y"), 0,
-                    getattr(face[2], "x"), getattr(face[2], "y"), 0,
-                    0
-                ]
+                logfile.write(str(counter)+'\n')
+                xvals = [getattr(x, "x") for x in [face[0],face[1],face[2]]]
+                yvals = [getattr(y, "y") for y in [face[0],face[1],face[2]]]
+                minx,maxx = min(xvals),max(xvals)
+                miny,maxy = min(yvals),max(yvals)
+                SHELL_THICKNESS = 2
+
+                if (maxx>x_min_model+SHELL_THICKNESS and minx< x_max_model-SHELL_THICKNESS and maxy>y_min_model+SHELL_THICKNESS and miny < y_max_model-SHELL_THICKNESS): # If some of the triangle is in the shell region
+                    face_z_values = [
+                           (getattr(face, "z")-SHELL_THICKNESS
+                           if
+                           getattr(face, "x")> x_min_model+SHELL_THICKNESS and 
+                           getattr(face, "x")< x_max_model-SHELL_THICKNESS and 
+                           getattr(face, "y")>y_min_model+SHELL_THICKNESS and 
+                           getattr(face, "y") < y_max_model-SHELL_THICKNESS
+                           else 0)
+                           for face in [face[0],face[1],face[2]]
+                        ]
+                    data = [
+                        getattr(face[3], "normal_x"), getattr(face[3], "normal_y"), getattr(face[3], "normal_z"),
+                        getattr(face[1], "x"), getattr(face[1], "y"), face_z_values[1],
+                        getattr(face[0], "x"), getattr(face[0], "y"), face_z_values[0],
+                        getattr(face[2], "x"), getattr(face[2], "y"), face_z_values[2],
+                        0
+                    ] 
+                       
+                else:
+                    data = [
+                        0, 0, -1,
+                        getattr(face[1], "x"), getattr(face[1], "y"), 0,
+                        getattr(face[0], "x"), getattr(face[0], "y"), 0,
+                        getattr(face[2], "x"), getattr(face[2], "y"), 0,
+                        0
+                    ]
                 stream.write(struct.pack(BINARY_FACET, *data))
                 if self.quit:
                     stream.close()
@@ -179,7 +211,9 @@ class STL(QThread):
             stream.seek(0)
             stream.write(struct.pack(BINARY_HEADER, b'Python Binary STL Writer', counter))
             stream.close()
-        except:
+        except Exception as e:
+            logfile.write(traceback.format_exc())
+            logfile.close()
             stream.close()
 
     def face_wall_vector(self, matrix_dem):
